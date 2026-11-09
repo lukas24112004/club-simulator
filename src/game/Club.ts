@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { BAR, DANCE_FLOOR, DOOR_WIDTH } from '../core/config';
+import { BAR, DANCE_FLOOR, DOOR_WIDTH, type UpgradeId } from '../core/config';
 import { ROOM3, S, toWorldX, toWorldZ, type Box } from './coords';
 
 const H = ROOM3.height;
@@ -25,8 +25,19 @@ function standard(color: number, roughness = 0.7, metalness = 0.1): THREE.MeshSt
 
 interface Mover {
   pivot: THREE.Group;
+  spot: THREE.SpotLight;
+  cone: THREE.Mesh;
   phase: number;
 }
+
+type Levels = Record<UpgradeId, number>;
+
+// How much of each upgrade is visible at each level (index = level).
+const HEADS_AT = [2, 3, 4, 6];
+const LASERS_AT = [0, 3, 6];
+const SPEAKER_HEIGHT = [1.2, 1.8, 2.4, 3.0];
+const WOOFERS_AT = [1, 2, 3, 4];
+const SPOT_INTENSITY = 60;
 
 interface Laser {
   pivot: THREE.Group;
@@ -44,7 +55,13 @@ export class Club {
   private tileRows = 0;
   private movers: Mover[] = [];
   private lasers: Laser[] = [];
-  private woofers: THREE.Mesh[] = [];
+  private stacks: THREE.Mesh[] = [];
+  private woofers: { mesh: THREE.Mesh; index: number }[] = [];
+  private beamMats: THREE.MeshBasicMaterial[] = [];
+  private laserMats: THREE.MeshBasicMaterial[] = [];
+  private smoke: { sprite: THREE.Sprite; x: number; y: number; z: number; phase: number }[] = [];
+  /** The scene reads this so a fog machine really makes the air thicker. */
+  fogDensity = 0.03;
   private neon: { mat: THREE.MeshBasicMaterial; base: THREE.Color }[] = [];
   private ball!: THREE.Mesh;
   private hemi!: THREE.HemisphereLight;
@@ -71,15 +88,20 @@ export class Club {
     this.hemi.intensity = 0.55 + 3.2 * blend;
   }
 
-  update(time: number, beats: number, pulse: number, energy: number): void {
-    // Dance floor tiles ripple and flash on the kick.
+  update(time: number, beats: number, pulse: number, energy: number, levels: Levels): void {
+    // Dance floor: a dull panel floor at first, a rippling LED floor once bought.
+    const led = levels.ledFloor > 0;
     const palette = [NEON.cyan, NEON.magenta, NEON.purple];
     for (let r = 0; r < this.tileRows; r++) {
       for (let c = 0; c < this.tileCols; c++) {
         const i = r * this.tileCols + c;
-        const wave = Math.sin(time * 2.2 + c * 0.6 + r * 0.5) * 0.5 + 0.5;
-        const level = 0.06 + (0.3 * wave + 0.5 * pulse * wave) * (0.4 + 0.6 * energy);
-        this.tmpColor.set(palette[(c + r + Math.floor(beats / 4)) % 3]).multiplyScalar(level * 1.8);
+        if (led) {
+          const wave = Math.sin(time * 2.2 + c * 0.6 + r * 0.5) * 0.5 + 0.5;
+          const level = 0.06 + (0.3 * wave + 0.5 * pulse * wave) * (0.4 + 0.6 * energy);
+          this.tmpColor.set(palette[(c + r + Math.floor(beats / 4)) % 3]).multiplyScalar(level * 1.8);
+        } else {
+          this.tmpColor.set(0x2a3350).multiplyScalar(0.05 + ((c + r) % 2) * 0.03);
+        }
         this.tiles.setColorAt(i, this.tmpColor);
       }
     }
@@ -88,18 +110,47 @@ export class Club {
     // Neon tubes breathe with the beat.
     for (const n of this.neon) n.mat.color.copy(n.base).multiplyScalar(0.8 + pulse * 0.7);
 
-    // Moving heads sweep, lasers fan.
-    for (const m of this.movers) {
+    // Moving heads: more of them switch on as you buy lights (the lights stay in the scene at intensity 0,
+    // because adding or removing real lights would make the game stutter while it recompiles).
+    const heads = HEADS_AT[levels.lights];
+    const fog = levels.fog > 0;
+    this.movers.forEach((m, i) => {
+      const on = i < heads;
+      m.spot.intensity = on ? SPOT_INTENSITY : 0;
+      m.cone.visible = on;
       m.pivot.rotation.x = Math.sin(time * 0.7 + m.phase) * 0.55;
       m.pivot.rotation.z = Math.cos(time * 0.9 + m.phase * 1.3) * 0.55;
-    }
-    for (const l of this.lasers) {
+    });
+    for (const mat of this.beamMats) mat.opacity = fog ? 0.06 : 0.035;
+
+    const beams = LASERS_AT[levels.lasers];
+    this.lasers.forEach((l, i) => {
+      l.pivot.visible = i < beams;
       l.pivot.rotation.y = Math.sin(time * 1.1 + l.phase) * 0.33;
       l.pivot.rotation.x = Math.PI / 2 + 0.18 + 0.16 * Math.sin(time * 0.8 + l.phase * 2);
+    });
+    for (const mat of this.laserMats) mat.opacity = fog ? 0.85 : 0.55;
+
+    // Speakers grow taller with more woofers
+    const level = levels.speakers;
+    const height = SPEAKER_HEIGHT[level];
+    for (const s of this.stacks) {
+      s.scale.y = height;
+      s.position.y = height / 2;
+    }
+    for (const w of this.woofers) {
+      w.mesh.visible = w.index < WOOFERS_AT[level];
+      w.mesh.scale.setScalar(1 + pulse * 0.18);
+    }
+
+    // Fog machine: thicker air and drifting haze over the dance floor
+    this.fogDensity = fog ? 0.04 : 0.03;
+    for (const s of this.smoke) {
+      s.sprite.visible = fog;
+      s.sprite.position.set(s.x + Math.sin(time * 0.15 + s.phase) * 1.2, s.y + Math.sin(time * 0.2 + s.phase * 2) * 0.2, s.z + Math.cos(time * 0.12 + s.phase) * 1.0);
     }
 
     this.ball.rotation.y = time * 0.4;
-    for (const w of this.woofers) w.scale.setScalar(1 + pulse * 0.18);
     this.lightA.intensity = 22 + pulse * 30;
     this.lightB.intensity = 22 + (1 - pulse) * 14;
     this.lightA.color.setHSL((time * 0.05) % 1, 1, 0.5);
@@ -245,14 +296,15 @@ export class Club {
     }
     this.colliders.push({ minX: 2.9, maxX: 9.1, minZ: -ROOM3.halfD, maxZ: bz + 0.9 });
 
-    // Speaker stacks with beating woofers
+    // Speaker stacks with beating woofers. They start small; the "Bigger speakers" upgrade grows them (see update()).
     for (const sx of [2.1, 9.9]) {
-      this.box(0.9, 2.0, 0.8, sx, 1.0, -ROOM3.halfD + 0.5, standard(0x0a0a12, 0.6, 0.3));
-      for (const y of [0.6, 1.5]) {
+      const stack = this.box(0.9, 1, 0.8, sx, 0.6, -ROOM3.halfD + 0.5, standard(0x0a0a12, 0.6, 0.3));
+      this.stacks.push(stack);
+      for (let k = 0; k < 4; k++) {
         const woofer = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.05, 8, 24), glow(NEON.magenta, 2.2));
-        woofer.position.set(sx, y, -ROOM3.halfD + 0.93);
+        woofer.position.set(sx, 0.45 + k * 0.65, -ROOM3.halfD + 0.93);
         this.group.add(woofer);
-        this.woofers.push(woofer);
+        this.woofers.push({ mesh: woofer, index: k });
       }
       this.colliders.push({ minX: sx - 0.5, maxX: sx + 0.5, minZ: -ROOM3.halfD, maxZ: -ROOM3.halfD + 0.95 });
     }
@@ -309,14 +361,15 @@ export class Club {
     for (const x of [0.2, 10.6]) this.box(0.12, 0.12, 4.2, x, H - 0.3, 1, standard(0x15151f, 0.5, 0.6));
 
     // Moving heads: a real spotlight plus a visible beam of light
-    const beamColors = [NEON.cyan, NEON.magenta, NEON.purple, NEON.green];
-    const spots: [number, number][] = [[2, -1], [4.8, 3], [7.6, -1], [10, 3]];
+    // Six heads are built; the "Moving lights" upgrade switches more of them on. The first two are spread far apart.
+    const beamColors = [NEON.cyan, NEON.magenta, NEON.purple, NEON.green, NEON.cyan, NEON.magenta];
+    const spots: [number, number][] = [[2, -1], [10, 3], [4.8, 3], [7.6, -1], [3.4, 1], [8.8, 1]];
     spots.forEach(([x, z], i) => {
       const color = beamColors[i];
       const pivot = new THREE.Group();
       pivot.position.set(x, H - 0.4, z);
 
-      const spot = new THREE.SpotLight(color, 90, 12, 0.32, 0.8, 1.6);
+      const spot = new THREE.SpotLight(color, SPOT_INTENSITY, 12, 0.32, 0.8, 1.6);
       const target = new THREE.Object3D();
       target.position.set(0, -4, 0);
       pivot.add(spot, target);
@@ -324,21 +377,20 @@ export class Club {
 
       const coneGeo = new THREE.ConeGeometry(1.3, 4.3, 24, 1, true);
       coneGeo.translate(0, -2.15, 0);
-      const cone = new THREE.Mesh(
-        coneGeo,
-        new THREE.MeshBasicMaterial({
-          color: new THREE.Color(color).multiplyScalar(2),
-          transparent: true,
-          opacity: 0.045,
-          blending: THREE.AdditiveBlending,
-          depthWrite: false,
-          side: THREE.DoubleSide,
-          toneMapped: false,
-        }),
-      );
+      const coneMat = new THREE.MeshBasicMaterial({
+        color: new THREE.Color(color).multiplyScalar(2),
+        transparent: true,
+        opacity: 0.035,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+        toneMapped: false,
+      });
+      const cone = new THREE.Mesh(coneGeo, coneMat);
+      this.beamMats.push(coneMat);
       pivot.add(cone);
       this.group.add(pivot);
-      this.movers.push({ pivot, phase: i * 1.7 });
+      this.movers.push({ pivot, spot, cone, phase: i * 1.7 });
     });
 
     // Lasers fanning out from above the DJ
@@ -349,27 +401,48 @@ export class Club {
       pivot.rotation.order = 'YXZ';
       const geo = new THREE.CylinderGeometry(0.008, 0.008, 12, 6);
       geo.translate(0, 6, 0);
-      const beam = new THREE.Mesh(
-        geo,
-        new THREE.MeshBasicMaterial({
-          color: new THREE.Color(color).multiplyScalar(2.2),
-          transparent: true,
-          opacity: 0.7,
-          blending: THREE.AdditiveBlending,
-          depthWrite: false,
-          toneMapped: false,
-        }),
-      );
-      pivot.add(beam);
+      const beamMat = new THREE.MeshBasicMaterial({
+        color: new THREE.Color(color).multiplyScalar(2.2),
+        transparent: true,
+        opacity: 0.55,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        toneMapped: false,
+      });
+      this.laserMats.push(beamMat);
+      pivot.add(new THREE.Mesh(geo, beamMat));
       this.group.add(pivot);
       this.lasers.push({ pivot, phase: i * 0.9 });
     });
+
+    this.buildSmoke();
 
     // Disco ball
     this.box(0.03, 0.9, 0.03, 5, H - 0.45, 1, standard(0x222222));
     this.ball = new THREE.Mesh(new THREE.IcosahedronGeometry(0.55, 1), new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.12, metalness: 1, flatShading: true }));
     this.ball.position.set(5, H - 1.0, 1);
     this.group.add(this.ball);
+  }
+
+  /** Soft haze clouds over the dance floor, shown only when the fog machine is bought. */
+  private buildSmoke(): void {
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = 128;
+    const ctx = canvas.getContext('2d')!;
+    const grad = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+    grad.addColorStop(0, 'rgba(255,255,255,0.9)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 128, 128);
+    const map = new THREE.CanvasTexture(canvas);
+    for (let i = 0; i < 14; i++) {
+      const mat = new THREE.SpriteMaterial({ map, color: 0x8a7cff, transparent: true, opacity: 0.03, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false });
+      const sprite = new THREE.Sprite(mat);
+      sprite.scale.setScalar(5 + (i % 3));
+      sprite.visible = false;
+      this.group.add(sprite);
+      this.smoke.push({ sprite, x: 0.5 + (i % 5) * 2.3, y: 0.7 + (i % 3) * 0.5, z: -2.5 + Math.floor(i / 5) * 3.2, phase: i * 1.3 });
+    }
   }
 
   // ---- Neon signs ----

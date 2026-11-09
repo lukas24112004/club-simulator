@@ -32,7 +32,6 @@ export const BARTENDER_SPACING = 100;
 export const DANCE_FLOOR: Rect = { x: 780, y: 340, w: 560, h: 400 };
 
 // ---- Guests ----
-export const MAX_GUESTS = 60;
 export const BASE_SPAWN_INTERVAL = 2.2; // seconds between arrivals at the lowest entrance price
 export const WALK_SPEED = 95; // px/s
 export const DANCE_SPEED = 28;
@@ -45,29 +44,31 @@ export const DRINK_PRICE = 6;
 export const SERVE_TIME = 2.2; // seconds a bartender needs per drink
 
 // ---- Upgrades ----
-export type UpgradeId = 'bartenders' | 'doorPrice';
+export type UpgradeId = 'bartenders' | 'doorPrice' | 'speakers' | 'lights' | 'ledFloor' | 'lasers' | 'fog';
 
 export interface UpgradeDef {
   id: UpgradeId;
   name: string;
   description: string;
   costs: number[]; // cost of each level; length = max level
+  appeal: number; // how much each level adds to the club rating
 }
 
 export const UPGRADES: UpgradeDef[] = [
-  {
-    id: 'bartenders',
-    name: 'Hire a bartender',
-    description: 'Serves drinks in parallel. Shorter queues.',
-    costs: [120, 300, 650],
-  },
-  {
-    id: 'doorPrice',
-    name: 'Raise entrance price',
-    description: 'More money per guest, slightly fewer guests.',
-    costs: [60, 200, 500],
-  },
+  { id: 'bartenders', name: 'Hire a bartender', description: 'Serves drinks in parallel. Shorter queues.', costs: [120, 300, 650], appeal: 1 },
+  { id: 'doorPrice', name: 'Raise entrance price', description: 'More money per guest, slightly fewer guests.', costs: [60, 200, 500], appeal: 0 },
+  { id: 'speakers', name: 'Bigger speakers', description: 'Taller stacks, more bass, more guests.', costs: [150, 400, 900], appeal: 2 },
+  { id: 'lights', name: 'Moving lights', description: 'More light heads sweeping the floor.', costs: [100, 300, 700], appeal: 1 },
+  { id: 'ledFloor', name: 'LED dance floor', description: 'The floor lights up and ripples with the beat.', costs: [250], appeal: 2 },
+  { id: 'lasers', name: 'Laser show', description: 'Beams fan out from the DJ booth.', costs: [350, 800], appeal: 2 },
+  { id: 'fog', name: 'Fog machine', description: 'Haze makes every beam visible.', costs: [200], appeal: 1 },
 ];
+
+/** Each rating point beyond the first brings 10% more arrivals. */
+export const ARRIVAL_PER_RATING = 0.1;
+export const MAX_GUESTS_BASE = 30;
+export const MAX_GUESTS_PER_RATING = 5;
+export const MAX_GUESTS_CAP = 120;
 
 export const DOOR_PRICES = [5, 8, 12, 18]; // indexed by doorPrice level
 export const DOOR_ARRIVAL_SLOWDOWN = [1, 1.15, 1.4, 1.8]; // spawn interval multiplier per level

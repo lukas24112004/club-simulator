@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DOOR_PRICES, MAX_GUESTS, SAVE_KEY, UPGRADES } from './config';
+import { DOOR_PRICES, MAX_GUESTS_CAP, SAVE_KEY, UPGRADES } from './config';
 import { clearSave, loadState, saveState, type StorageLike } from './save';
 import { Simulation } from './simulation';
 import { createInitialState } from './state';
@@ -48,7 +48,7 @@ describe('guests and money', () => {
     const sim = new Simulation(createInitialState(), seeded(7));
     for (let i = 0; i < 4000; i++) {
       sim.update(0.05);
-      expect(sim.guests.length).toBeLessThanOrEqual(MAX_GUESTS);
+      expect(sim.guests.length).toBeLessThanOrEqual(sim.maxGuests);
       expect(sim.state.money).toBeGreaterThanOrEqual(0);
     }
   });
@@ -56,7 +56,7 @@ describe('guests and money', () => {
   it('guests eventually leave, so the club does not fill up forever', () => {
     const sim = new Simulation(createInitialState(), seeded(3));
     run(sim, 300);
-    expect(sim.guests.length).toBeLessThan(MAX_GUESTS);
+    expect(sim.guests.length).toBeLessThan(sim.maxGuests);
   });
 
   it('a very long frame is clamped instead of teleporting guests', () => {
@@ -107,6 +107,49 @@ describe('upgrades', () => {
     run(four, 400);
 
     expect(four.guestsLost).toBeLessThan(one.guestsLost);
+  });
+});
+
+describe('club rating', () => {
+  it('starts at 1 and every appealing upgrade raises it', () => {
+    const sim = new Simulation(createInitialState(), seeded());
+    expect(sim.rating).toBe(1);
+    sim.state.money = 100000;
+    sim.buyUpgrade('speakers');
+    expect(sim.rating).toBe(1 + 2);
+    sim.buyUpgrade('lasers');
+    expect(sim.rating).toBe(1 + 2 + 2);
+  });
+
+  it('a higher rating means shorter gaps between guests and a bigger crowd limit', () => {
+    const plain = new Simulation(createInitialState(), seeded());
+    const fancy = new Simulation(createInitialState(), seeded());
+    fancy.state.money = 100000;
+    for (const u of UPGRADES) for (let i = 0; i < u.costs.length; i++) fancy.buyUpgrade(u.id);
+    expect(fancy.spawnInterval).toBeLessThan(plain.spawnInterval * 2);
+    expect(fancy.maxGuests).toBeGreaterThan(plain.maxGuests);
+    expect(fancy.maxGuests).toBeLessThanOrEqual(MAX_GUESTS_CAP);
+  });
+
+  it('every upgrade can be bought to its maximum level, and no further', () => {
+    const sim = new Simulation(createInitialState(), seeded());
+    sim.state.money = 1_000_000;
+    for (const u of UPGRADES) {
+      for (let i = 0; i < u.costs.length + 2; i++) sim.buyUpgrade(u.id);
+      expect(sim.state.upgrades[u.id]).toBe(u.costs.length);
+    }
+  });
+
+  it('a better club earns more over the same time', () => {
+    const plain = new Simulation(createInitialState(), seeded(11));
+    run(plain, 120);
+    const state = createInitialState();
+    state.upgrades.speakers = 3;
+    state.upgrades.lasers = 2;
+    state.upgrades.bartenders = 2;
+    const fancy = new Simulation(state, seeded(11));
+    run(fancy, 120);
+    expect(fancy.state.totalEarned).toBeGreaterThan(plain.state.totalEarned);
   });
 });
 

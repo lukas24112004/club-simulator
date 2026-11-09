@@ -19,7 +19,7 @@ Then open the address Vite prints (usually http://localhost:5173) and click to e
 | Mouse | Look around |
 | Shift | Run |
 | M | Switch between walking and the manager's bird's-eye view |
-| 1 / 2 | Buy upgrades (or click the cards in manager view) |
+| 1 - 7 | Buy upgrades (or click the cards in manager view) |
 | N | Mute the music |
 | Esc | Pause |
 
@@ -42,7 +42,7 @@ Progress saves automatically in your browser. "Reset progress" (bottom left) sta
 ## Roadmap
 
 1. ~~A small club, guests walking in, money coming in~~ (done, now in 3D)
-2. A shop with more upgrades and visible changes
+2. ~~A shop with more upgrades and visible changes~~ (done: speakers, lights, LED floor, lasers, fog, and a club rating that grows the crowd)
 3. DJs and music
 4. Location upgrades
 5. Events, polish

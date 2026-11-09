@@ -13,8 +13,8 @@ export type Mode = 'overlay' | 'walk' | 'manager';
 
 const MODE_TEXT: Record<Mode, string> = {
   overlay: '',
-  walk: 'WASD move · Shift run · Mouse look · M manager view · 1/2 buy · N mute · Esc pause',
-  manager: 'Manager view · click a card or press 1/2 to buy · M to walk in',
+  walk: 'WASD move · Shift run · Mouse look · M manager view · 1-7 buy · N mute · Esc pause',
+  manager: 'Manager view · click a card or press 1-7 to buy · M to walk in',
 };
 
 /** Owns the renderer and the frame loop. Each frame: advance the rules, then draw what they say. */
@@ -114,7 +114,10 @@ export class App {
   }
 
   private buy(id: UpgradeId): void {
-    if (this.sim.buyUpgrade(id)) this.saveNow();
+    if (!this.sim.buyUpgrade(id)) return;
+    this.saveNow();
+    const info = this.sim.upgradeInfo(id);
+    this.hud.toast(`${info.def.name} · level ${info.level}`);
   }
 
   private onKey(e: KeyboardEvent): void {
@@ -152,7 +155,9 @@ export class App {
     const pulse = this.music.pulse;
     const energy = Math.min(this.sim.guests.length / 40, 1);
 
-    this.club.update(t, beats, pulse, energy);
+    this.club.update(t, beats, pulse, energy, this.sim.state.upgrades);
+    const fog = this.scene.fog as THREE.FogExp2;
+    fog.density += (this.club.fogDensity - fog.density) * Math.min(1, dt * 1.5);
     this.crowd.update(this.sim, t, beats);
 
     if (this.mode === 'walk') this.player.update(dt);

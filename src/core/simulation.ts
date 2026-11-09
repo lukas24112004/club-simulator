@@ -1,5 +1,5 @@
 import * as C from './config';
-import { createInitialState, maxLevel, type ClubState } from './state';
+import { clubRating, createInitialState, maxLevel, type ClubState } from './state';
 import type { Point } from './config';
 
 export type GuestPhase = 'arriving' | 'queueing' | 'ordering' | 'toFloor' | 'dancing' | 'leaving';
@@ -73,8 +73,19 @@ export class Simulation {
     return C.DOOR_PRICES[this.state.upgrades.doorPrice];
   }
 
+  get rating(): number {
+    return clubRating(this.state);
+  }
+
+  /** A better club draws a bigger crowd: shorter gaps between arrivals... */
   get spawnInterval(): number {
-    return C.BASE_SPAWN_INTERVAL * C.DOOR_ARRIVAL_SLOWDOWN[this.state.upgrades.doorPrice];
+    const popularity = 1 + C.ARRIVAL_PER_RATING * (this.rating - 1);
+    return (C.BASE_SPAWN_INTERVAL * C.DOOR_ARRIVAL_SLOWDOWN[this.state.upgrades.doorPrice]) / popularity;
+  }
+
+  /** ...and room for more people inside. */
+  get maxGuests(): number {
+    return Math.min(C.MAX_GUESTS_CAP, C.MAX_GUESTS_BASE + C.MAX_GUESTS_PER_RATING * this.rating);
   }
 
   // ---- Player actions ----
@@ -118,7 +129,7 @@ export class Simulation {
     const dt = Math.min(dtRaw, 0.25); // a hidden tab must not cause a giant jump
 
     this.spawnTimer -= dt;
-    if (this.spawnTimer <= 0 && this.guests.length < C.MAX_GUESTS) {
+    if (this.spawnTimer <= 0 && this.guests.length < this.maxGuests) {
       this.spawnGuest();
       this.spawnTimer = this.spawnInterval * (0.7 + 0.6 * this.rng());
     }

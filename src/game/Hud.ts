@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import { UPGRADES, type UpgradeId } from '../core/config';
 import type { Simulation } from '../core/simulation';
-import { clubRating } from '../core/state';
 
 interface Popup {
   el: HTMLElement;
@@ -37,6 +36,15 @@ export class Hud {
     });
   }
 
+  /** A short message in the middle of the screen, e.g. after buying an upgrade. */
+  toast(text: string): void {
+    const el = document.getElementById('toast')!;
+    el.textContent = text;
+    el.classList.remove('show');
+    void el.offsetWidth; // restart the animation
+    el.classList.add('show');
+  }
+
   showOverlay(visible: boolean): void {
     this.overlay.classList.toggle('hidden', !visible);
   }
@@ -59,7 +67,7 @@ export class Hud {
   update(camera: THREE.Camera, width: number, height: number): void {
     const s = this.sim.state;
     this.money.textContent = `$${fmt(s.money)}`;
-    const stats = `Rating ★ ${clubRating(s)}  ·  Guests ${this.sim.guests.length}  ·  Queue ${this.sim.barQueue.length}  ·  Entered ${fmt(s.guestsEntered)}  ·  Angry ${this.sim.guestsLost}`;
+    const stats = `Rating ★ ${this.sim.rating}  ·  Guests ${this.sim.guests.length}/${this.sim.maxGuests}  ·  Queue ${this.sim.barQueue.length}  ·  Entered ${fmt(s.guestsEntered)}  ·  Angry ${this.sim.guestsLost}`;
     if (stats !== this.lastStats) {
       this.stats.textContent = stats;
       this.lastStats = stats;

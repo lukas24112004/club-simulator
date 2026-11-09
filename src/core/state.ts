@@ -9,19 +9,16 @@ export interface ClubState {
 }
 
 export function createInitialState(): ClubState {
-  return {
-    money: 0,
-    totalEarned: 0,
-    guestsEntered: 0,
-    upgrades: { bartenders: 0, doorPrice: 0 },
-  };
+  const upgrades = {} as Record<UpgradeId, number>;
+  for (const u of UPGRADES) upgrades[u.id] = 0;
+  return { money: 0, totalEarned: 0, guestsEntered: 0, upgrades };
 }
 
 export function maxLevel(id: UpgradeId): number {
   return UPGRADES.find((u) => u.id === id)!.costs.length;
 }
 
-/** One simple number for "how good is the club". Grows with every upgrade. */
+/** One number for "how good is the club". Every upgrade raises it, and a higher rating brings bigger crowds. */
 export function clubRating(state: ClubState): number {
-  return 1 + state.upgrades.bartenders + state.upgrades.doorPrice;
+  return UPGRADES.reduce((sum, u) => sum + state.upgrades[u.id] * u.appeal, 1);
 }

@@ -1,9 +1,9 @@
 import * as THREE from 'three';
-import { MAX_GUESTS } from '../core/config';
+import { MAX_GUESTS_CAP } from '../core/config';
 import type { Simulation } from '../core/simulation';
 import { toWorldX, toWorldZ } from './coords';
 
-const CAPACITY = MAX_GUESTS + 8;
+const CAPACITY = MAX_GUESTS_CAP + 8;
 const SHIRTS = [0x00b8d4, 0xd81bb4, 0x8a4fe0, 0xe0a83a, 0x2fd10f, 0xe05a2a];
 const SKINS = [0xf1c9a5, 0xd9a07a, 0xb97a56, 0x8d5a3b, 0x5e3a26];
 
